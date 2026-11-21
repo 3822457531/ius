@@ -49,8 +49,9 @@ type User struct {
 	IsAuditor          bool       `gorm:"default:false"` // 是否 审核用户
 	IsCs               bool       `gorm:"column:is_cs;default:false"` // 是否客服（H5 可接入接线台）
 	// 授信额度：独立于可用算力，仅可用于授信报单（赠送激活），不可转账/AI 消费。
-	// Max = 自费投入推导基数 − 累计授信报单消耗；Available 由直推投入累积且 ≤ Max（还款不回补）。
-	CreditMax       float64 `gorm:"column:credit_max;default:0"`       // 最大额度（仅自投增加，报单同步扣减）
-	CreditAvailable float64 `gorm:"column:credit_available;default:0"` // 当前可用额度（只加给直推上级，≤ Max）
-	CreditDebt      float64 `gorm:"column:credit_debt;default:0"`      // 已消耗待还额度
+	// Max = max(新规则自投基数, CreditMaxFloor) − 累计授信报单消耗；Available ≤ Max（还款不回补）。
+	CreditMax       float64 `gorm:"column:credit_max;default:0"`        // 当前最大额度（展示/校验）
+	CreditMaxFloor  float64 `gorm:"column:credit_max_floor;default:0"`  // 历史保底基数（旧规则已形成的投入侧峰值，只升不降）
+	CreditAvailable float64 `gorm:"column:credit_available;default:0"`  // 当前可用额度（只加给直推上级，≤ Max）
+	CreditDebt      float64 `gorm:"column:credit_debt;default:0"`       // 已消耗待还额度
 }

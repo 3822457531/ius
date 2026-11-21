@@ -250,7 +250,7 @@ func TestRecalcMax_SmallOrdersDoNotIncreaseMax(t *testing.T) {
 	db := setupCreditTestDB(t)
 	svc := NewCreditService(db)
 	mustUser(t, db, &model.User{Username: "u", Power: 1000})
-	// 多笔小额合计远超 1 万，但单笔都 < 1 万 → Max 仍为 0
+	// 新用户多笔小额：无历史 Floor / 无 MaxDown → 不抬 Max
 	for i, s := range []float64{3000, 4000, 5000, 9000} {
 		mustOrder(t, db, &model.Order{
 			UserId: 1, Username: "u", OrderNo: fmt.Sprintf("small-%d", i),
@@ -263,7 +263,6 @@ func TestRecalcMax_SmallOrdersDoNotIncreaseMax(t *testing.T) {
 	if u := loadUser(t, db, 1); u.CreditMax != 0 {
 		t.Fatalf("small orders must not raise max, got %v", u.CreditMax)
 	}
-	// 再加一笔单笔 ≥ 1 万 → 才计入
 	mustOrder(t, db, &model.Order{
 		UserId: 1, Username: "u", OrderNo: "big-1",
 		Status: types.OrderZyz, Sales: 10000, Power: 50000, NowPower: 50000,
@@ -273,6 +272,71 @@ func TestRecalcMax_SmallOrdersDoNotIncreaseMax(t *testing.T) {
 	}
 	if u := loadUser(t, db, 1); u.CreditMax != 50000 {
 		t.Fatalf("single >=10000 should raise max to 50000, got %v", u.CreditMax)
+	}
+}
+
+func TestRecalcMax_FloorPreservesWipedHistory(t *testing.T) {
+	db := setupCreditTestDB(t)
+	svc := NewCreditService(db)
+	// 模拟：旧规则下 5 万额度，已被新规则打成 0，并留下 MaxDown 流水
+	mustUser(t, db, &model.User{Username: "wiped", Power: 1000, CreditMax: 0, CreditMaxFloor: 0})
+	mustOrder(t, db, &model.Order{
+		UserId: 1, Username: "wiped", OrderNo: "old-big",
+		Status: types.OrderZyz, Sales: 10000, Power: 50000, NowPower: 50000,
+	})
+	// 一笔小额老单：新规则不认它，但它不该让额度变多也不该变少
+	mustOrder(t, db, &model.Order{
+		UserId: 1, Username: "wiped", OrderNo: "old-tiny",
+		Status: types.OrderZyz, Sales: 5000, Power: 25000, NowPower: 25000,
+	})
+	if err := db.Create(&model.PowerLog{
+		UserId: 1, Username: "wiped", Type: types.PowerCredit, Amount: 50000,
+		Balance: 0, Mark: types.PowerSub, Model: CreditLogModelMaxDown,
+		Remark: "最大额度减少 50000.000000 → 0.000000", CreatedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RecalcMax(db, 1, creditCfg()); err != nil {
+		t.Fatal(err)
+	}
+	u := loadUser(t, db, 1)
+	// 新规则：只有 10000 达标 → 50000；Floor 用 MaxDown 流水的 50000 兜住
+	if u.CreditMax != 50000 || u.CreditMaxFloor != 50000 {
+		t.Fatalf("want max/floor 50000 got max=%v floor=%v", u.CreditMax, u.CreditMaxFloor)
+	}
+	// 之后再追加小额，不应继续抬高
+	mustOrder(t, db, &model.Order{
+		UserId: 1, Username: "wiped", OrderNo: "new-tiny",
+		Status: types.OrderZyz, Sales: 8000, Power: 40000, NowPower: 40000,
+	})
+	if err := svc.RecalcMax(db, 1, creditCfg()); err != nil {
+		t.Fatal(err)
+	}
+	if u = loadUser(t, db, 1); u.CreditMax != 50000 {
+		t.Fatalf("new small order must not raise max, got %v", u.CreditMax)
+	}
+}
+
+func TestRecalcMax_FloorPreservesExistingMax(t *testing.T) {
+	db := setupCreditTestDB(t)
+	svc := NewCreditService(db)
+	// 仍保留旧 Max=50000（尚未被打成 0），订单按新规则不够
+	mustUser(t, db, &model.User{
+		Username: "keep", Power: 1000, CreditMax: 50000, CreditAvailable: 1000, CreditMaxFloor: 0,
+	})
+	mustOrder(t, db, &model.Order{
+		UserId: 1, Username: "keep", OrderNo: "s1",
+		Status: types.OrderZyz, Sales: 5000, Power: 25000, NowPower: 25000,
+	})
+	if err := svc.RecalcMax(db, 1, creditCfg()); err != nil {
+		t.Fatal(err)
+	}
+	u := loadUser(t, db, 1)
+	if u.CreditMax != 50000 {
+		t.Fatalf("existing max must be preserved, got %v", u.CreditMax)
+	}
+	if u.CreditMaxFloor < 50000 {
+		t.Fatalf("floor should be at least 50000, got %v", u.CreditMaxFloor)
 	}
 }
 
@@ -406,5 +470,98 @@ func TestCreditConfigDefaults(t *testing.T) {
 	cfg.CreditDirectRate = 2
 	if cfg.CreditDirectRateOrDefault() != 1 {
 		t.Fatalf("rate >1 should clamp to 1")
+	}
+}
+
+// 旧口径下「5000×5=25000」这类 Max 被新规则打成 0 后，保底必须按旧口径（不看单笔门槛）恢复。
+// 面板里「最大额度减少 25000 → 0」的那批用户就是这种情况；用新规则公式只能算出 0，救不回来。
+func TestRecalcMax_FloorRestoresSmallOrderHistory(t *testing.T) {
+	db := setupCreditTestDB(t)
+	svc := NewCreditService(db)
+	mustUser(t, db, &model.User{Username: "small", Power: 1000, CreditMax: 0, CreditMaxFloor: 0})
+	mustOrder(t, db, &model.Order{
+		UserId: 1, Username: "small", OrderNo: "small-1",
+		Status: types.OrderZyz, Sales: 5000, Power: 25000, NowPower: 25000,
+	})
+	// 被新规则打成 0 的现场证据
+	if err := db.Create(&model.PowerLog{
+		UserId: 1, Username: "small", Type: types.PowerCredit, Amount: 25000,
+		Balance: 0, Mark: types.PowerSub, Model: CreditLogModelMaxDown,
+		Remark: "最大额度减少 25000.000000 → 0.000000", CreatedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RecalcMax(db, 1, creditCfg()); err != nil {
+		t.Fatal(err)
+	}
+	u := loadUser(t, db, 1)
+	if u.CreditMaxFloor != 25000 || u.CreditMax != 25000 {
+		t.Fatalf("legacy floor want 25000/25000 got floor=%v max=%v", u.CreditMaxFloor, u.CreditMax)
+	}
+}
+
+// 订单被清理/改状态后，仍要靠「最大额度减少」流水把历史额度兜回来（截图场景的兜底路径）
+func TestRecalcMax_FloorRestoresFromWipedLogWithoutOrders(t *testing.T) {
+	db := setupCreditTestDB(t)
+	svc := NewCreditService(db)
+	mustUser(t, db, &model.User{Username: "purged", Power: 1000, CreditMax: 0, CreditMaxFloor: 0})
+	if err := db.Create(&model.PowerLog{
+		UserId: 1, Username: "purged", Type: types.PowerCredit, Amount: 50000,
+		Balance: 0, Mark: types.PowerSub, Model: CreditLogModelMaxDown,
+		Remark: "最大额度减少 50000.000000 → 0.000000", CreatedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+	if err := svc.RecalcMax(db, 1, creditCfg()); err != nil {
+		t.Fatal(err)
+	}
+	if u := loadUser(t, db, 1); u.CreditMax != 50000 || u.CreditMaxFloor != 50000 {
+		t.Fatalf("want max/floor 50000 got max=%v floor=%v", u.CreditMax, u.CreditMaxFloor)
+	}
+}
+
+// 启动回填：只挑「有授信痕迹但 Floor 还是 0」的用户主动重算一次，
+// 被打成 0 的老额度立刻恢复，不必等用户再下单；全新用户不受影响。
+func TestBackfillCreditMaxFloor_RestoresWipedUsers(t *testing.T) {
+	db := setupCreditTestDB(t)
+	svc := NewCreditService(db)
+
+	// 1 被打成 0 的老用户：投过 1 万，Max 曾 5 万
+	mustUser(t, db, &model.User{Username: "wiped", Power: 1000, CreditMax: 0, CreditMaxFloor: 0})
+	mustOrder(t, db, &model.Order{
+		UserId: 1, Username: "wiped", OrderNo: "w-1",
+		Status: types.OrderZyz, Sales: 10000, Power: 50000, NowPower: 50000,
+	})
+	if err := db.Create(&model.PowerLog{
+		UserId: 1, Username: "wiped", Type: types.PowerCredit, Amount: 50000,
+		Balance: 0, Mark: types.PowerSub, Model: CreditLogModelMaxDown,
+		Remark: "最大额度减少 50000.000000 → 0.000000", CreatedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	// 2 全新用户：只有一笔小额单，没有任何授信痕迹
+	mustUser(t, db, &model.User{Username: "fresh", Power: 0})
+	mustOrder(t, db, &model.Order{
+		UserId: 2, Username: "fresh", OrderNo: "f-1",
+		Status: types.OrderZyz, Sales: 3000, Power: 15000, NowPower: 15000,
+	})
+
+	n, err := svc.BackfillCreditMaxFloor(creditCfg())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n != 1 {
+		t.Fatalf("backfill want 1 user got %d", n)
+	}
+	if u := loadUser(t, db, 1); u.CreditMax != 50000 || u.CreditMaxFloor != 50000 {
+		t.Fatalf("wiped user want max/floor 50000 got max=%v floor=%v", u.CreditMax, u.CreditMaxFloor)
+	}
+	if u := loadUser(t, db, 2); u.CreditMax != 0 || u.CreditMaxFloor != 0 {
+		t.Fatalf("fresh user must be untouched, floor=%v max=%v", u.CreditMaxFloor, u.CreditMax)
+	}
+	// 幂等：第二次没有候选
+	if n, err = svc.BackfillCreditMaxFloor(creditCfg()); err != nil || n != 0 {
+		t.Fatalf("second run want 0 / nil, got %d / %v", n, err)
 	}
 }

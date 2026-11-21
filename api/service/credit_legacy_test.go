@@ -96,9 +96,9 @@ func TestLegacy_OldPlusNew_AddsOnTopOfLegacyBase(t *testing.T) {
 	}
 }
 
-// 回归：分界前多笔小额、无单笔达标的用户必须被封顶，不能按合计×杠杆拿超额
-// 现场数据：4 笔共 1.2 万 → 旧口径 60000（泄漏），新口径 50000
-func TestLegacy_MultiSmallOldOrders_NowCapped(t *testing.T) {
+// 回归：T 前多笔小额、无单笔达标的用户仍然是老会员，额度固定 5 万。
+// 现场数据：4 笔共 1.2 万 —— 旧口径 60000、新规则按单笔门槛会算成 0，正确口径是 50000。
+func TestLegacy_MultiSmallOldOrders_FixedAtLegacyBase(t *testing.T) {
 	db := setupCreditTestDB(t)
 	cutoff := cutoffTime(t)
 
@@ -109,7 +109,7 @@ func TestLegacy_MultiSmallOldOrders_NowCapped(t *testing.T) {
 
 	snap := maxOf(t, db, 1, legacyCfg())
 	if !snap.Legacy {
-		t.Fatalf("pre-cutoff total 12000 >= 10000 should qualify as legacy")
+		t.Fatalf("pre-cutoff invest should qualify as legacy")
 	}
 	if snap.Max != 50000 {
 		t.Fatalf("want 50000 got %v", snap.Max)
@@ -119,8 +119,29 @@ func TestLegacy_MultiSmallOldOrders_NowCapped(t *testing.T) {
 	}
 }
 
-// 封顶不产生倒挂：分界前投入越多，额度不下降
-func TestLegacy_NoInversionAcrossThreshold(t *testing.T) {
+// 小额老单被新规则打成 0 后，靠 MaxDown 流水恢复到固定 5 万
+func TestLegacy_WipedSmallInvestRestoredToLegacyBase(t *testing.T) {
+	db := setupCreditTestDB(t)
+	cutoff := cutoffTime(t)
+
+	mustUser(t, db, &model.User{Username: "wiped", Power: 0, CreditMax: 0, CreditMaxFloor: 0})
+	orderAt(t, db, 1, 5000, types.OrderZyz, cutoff.Add(-time.Hour))
+	// 新规则上线时被打成 0 的现场
+	if err := db.Create(&model.PowerLog{
+		UserId: 1, Username: "wiped", Type: types.PowerCredit, Amount: 25000,
+		Balance: 0, Mark: types.PowerSub, Model: CreditLogModelMaxDown,
+		Remark: "最大额度减少 25000.000000 → 0.000000", CreatedAt: time.Now(),
+	}).Error; err != nil {
+		t.Fatal(err)
+	}
+
+	if snap := maxOf(t, db, 1, legacyCfg()); !snap.Legacy || snap.Max != 50000 {
+		t.Fatalf("want legacy max 50000, got legacy=%v max=%v", snap.Legacy, snap.Max)
+	}
+}
+
+// T 前有投入就是固定 5 万：投多投少都一样，不存在按比例折算，也不存在阶梯
+func TestLegacy_OldInvestAmountIrrelevant(t *testing.T) {
 	db := setupCreditTestDB(t)
 	cutoff := cutoffTime(t)
 
@@ -128,17 +149,20 @@ func TestLegacy_NoInversionAcrossThreshold(t *testing.T) {
 		sales float64
 		want  float64
 	}{
-		{5000, 25000},   // 未达门槛 → 合计×杠杆
-		{9999, 49995},   // 仍未达门槛
-		{10000, 50000},  // 刚达门槛 → 固定上限
-		{90000, 50000},  // 远超门槛 → 仍封顶
+		{1, 50000},      // 哪怕只有 1 块，也是老会员
+		{5000, 50000},   // 小额老单不再按比例折算
+		{9999, 50000},   // 与门槛无关
+		{10000, 50000},  // 刚过门槛
+		{90000, 50000},  // 投多了也不再加
 	}
 	for i, c := range cases {
 		uid := uint(i + 1)
 		mustUser(t, db, &model.User{Username: "u", Power: 0})
 		orderAt(t, db, uid, c.sales, types.OrderZyz, cutoff.Add(-time.Hour))
-		if snap := maxOf(t, db, uid, legacyCfg()); snap.Max != c.want {
-			t.Fatalf("sales=%v want %v got %v", c.sales, c.want, snap.Max)
+		snap := maxOf(t, db, uid, legacyCfg())
+		if !snap.Legacy || snap.Max != c.want {
+			t.Fatalf("sales=%v want legacy %v got legacy=%v max=%v",
+				c.sales, c.want, snap.Legacy, snap.Max)
 		}
 	}
 }
@@ -181,15 +205,15 @@ func TestLegacy_CutoffUnset_FallsBackToCurrentMechanism(t *testing.T) {
 	}
 }
 
-// max 被下调时可用额度同步截断，债务不变
+// max 只会被「新规则基数」抬高，不会被下调；可用额度超过 max 时同步截断，债务不变
 func TestLegacy_AvailableTruncatedButDebtKept(t *testing.T) {
 	db := setupCreditTestDB(t)
 	cutoff := cutoffTime(t)
 
-	// 改造前按旧机制已累积到 50 万 max、20 万可用、3 万债务
+	// 改造前已累积：5 万 max、8 万可用（脏数据，可用 > max）、3 万债务
 	mustUser(t, db, &model.User{
 		Username: "old", Power: 0,
-		CreditMax: 500000, CreditAvailable: 200000, CreditDebt: 30000,
+		CreditMax: 50000, CreditAvailable: 80000, CreditDebt: 30000,
 	})
 	orderAt(t, db, 1, 100000, types.OrderZyz, cutoff.Add(-time.Hour))
 
@@ -207,6 +231,23 @@ func TestLegacy_AvailableTruncatedButDebtKept(t *testing.T) {
 	}
 }
 
+// 旧 Max 高于新规则推导值时不下调：Floor 是快照，只做保底，不做「纠正」
+func TestLegacy_FloorNeverDowngradesOldMax(t *testing.T) {
+	db := setupCreditTestDB(t)
+	cutoff := cutoffTime(t)
+
+	mustUser(t, db, &model.User{Username: "old", Power: 0, CreditMax: 500000})
+	orderAt(t, db, 1, 100000, types.OrderZyz, cutoff.Add(-time.Hour))
+
+	snap := maxOf(t, db, 1, legacyCfg())
+	if snap.Max != 500000 {
+		t.Fatalf("old max must be kept as floor, want 500000 got %v", snap.Max)
+	}
+	if u := loadUser(t, db, 1); u.CreditMaxFloor != 500000 {
+		t.Fatalf("floor want 500000 got %v", u.CreditMaxFloor)
+	}
+}
+
 // EvaluateCredit 纯函数分支
 func TestEvaluateCredit_Pure(t *testing.T) {
 	p := CreditMaxParamsFrom(legacyCfg())
@@ -217,10 +258,11 @@ func TestEvaluateCredit_Pure(t *testing.T) {
 		wantMax  float64
 		wantBase float64
 	}{
-		{"分界前达标 + 分界后达标", InvestSplit{Before: 100000, After: 10000, Total: 110000}, 100000, 50000},
+		{"分界前达标 + 分界后达标", InvestSplit{Before: 100000, After: 10000, AfterCounted: 10000, Total: 110000}, 100000, 50000},
 		{"分界前达标、无新增", InvestSplit{Before: 100000, Total: 100000}, 50000, 50000},
-		{"分界前未达门槛", InvestSplit{Before: 9999, Total: 9999}, 0, 0},
-		{"分界前为零、分界后达标", InvestSplit{After: 10000, Total: 10000}, 50000, 0},
+		// 分界前金额不参与乘法：投 9999 也是固定 5 万
+		{"分界前未达门槛", InvestSplit{Before: 9999, Total: 9999}, 50000, 50000},
+		{"分界前为零、分界后达标", InvestSplit{After: 10000, AfterCounted: 10000, Total: 10000}, 50000, 0},
 		{"完全无投入", InvestSplit{}, 0, 0},
 	}
 	for _, c := range cases {
@@ -244,16 +286,16 @@ func TestEvaluateCredit_AfterBelowThreshold(t *testing.T) {
 		wantCounted float64
 	}{
 		// A：T 前有 ≥1 万，T 后只投 8000 → 固定上限保住，新增不放大
-		{"老会员 + 分界后 8000", InvestSplit{Before: 12000, After: 8000, Total: 20000}, 50000, true, 0},
+		{"老会员 + 分界后 8000", InvestSplit{Before: 12000, After: 8000, AfterCounted: 0, Total: 20000}, 50000, true, 0},
 		// A：T 前无订单，T 后只投 8000 → 完全无额度
-		{"普通会员 + 分界后 8000", InvestSplit{After: 8000, Total: 8000}, 0, false, 0},
+		{"普通会员 + 分界后 8000", InvestSplit{After: 8000, AfterCounted: 0, Total: 8000}, 0, false, 0},
 		// B：T 前无订单，T 后投 20000 → 达门槛，按杠杆计算
-		{"普通会员 + 分界后 20000", InvestSplit{After: 20000, Total: 20000}, 100000, false, 20000},
+		{"普通会员 + 分界后 20000", InvestSplit{After: 20000, AfterCounted: 20000, Total: 20000}, 100000, false, 20000},
 		// B：T 前有 ≥1 万，T 后投 20000 → 基数 + 新增
-		{"老会员 + 分界后 20000", InvestSplit{Before: 12000, After: 20000, Total: 32000}, 150000, true, 20000},
+		{"老会员 + 分界后 20000", InvestSplit{Before: 12000, After: 20000, AfterCounted: 20000, Total: 32000}, 150000, true, 20000},
 		// 边界：正好等于门槛即达标
-		{"老会员 + 分界后恰好 10000", InvestSplit{Before: 12000, After: 10000, Total: 22000}, 100000, true, 10000},
-		{"普通会员 + 分界后恰好 10000", InvestSplit{After: 10000, Total: 10000}, 50000, false, 10000},
+		{"老会员 + 分界后恰好 10000", InvestSplit{Before: 12000, After: 10000, AfterCounted: 10000, Total: 22000}, 100000, true, 10000},
+		{"普通会员 + 分界后恰好 10000", InvestSplit{After: 10000, AfterCounted: 10000, Total: 10000}, 50000, false, 10000},
 	}
 	for _, c := range cases {
 		got := EvaluateCredit(p, c.split)
@@ -271,27 +313,33 @@ func TestEvaluateCredit_NoCutoffStillRespectsMin(t *testing.T) {
 	cfg.CreditLegacyCutoff = ""
 	p := CreditMaxParamsFrom(cfg)
 
-	got := EvaluateCredit(p, InvestSplit{After: 8000, Total: 8000})
+	got := EvaluateCredit(p, InvestSplit{After: 8000, AfterCounted: 0, Total: 8000})
 	if got.Max != 0 {
 		t.Fatalf("without cutoff, 8000 below min should yield 0, got %v", got.Max)
 	}
-	got = EvaluateCredit(p, InvestSplit{After: 10000, Total: 10000})
+	got = EvaluateCredit(p, InvestSplit{After: 10000, AfterCounted: 10000, Total: 10000})
 	if got.Max != 50000 {
 		t.Fatalf("without cutoff, 10000 should yield 50000, got %v", got.Max)
 	}
 }
 
-// 门槛配成极小值（1）等价于「分界前任意投入即算老会员」，但零投入不得白拿基数。
-// 注意：门槛 0 会被 OrDefault 回退成默认 1 万，避免配置缺字段时全员变成老会员。
-func TestEvaluateCredit_TinyThresholdRequiresInvest(t *testing.T) {
-	cfg := legacyCfg()
-	cfg.CreditLegacyMinPower = 1
-	p := CreditMaxParamsFrom(cfg)
+// 老会员只看「有没有投过」，门槛参数完全不参与资格判定；零投入不得白拿基数。
+func TestEvaluateCredit_AnyHistoricalInvestQualifies(t *testing.T) {
+	// 门槛配成 1，和配成 1 万，结果必须一致
+	for _, minPower := range []float64{1, 10000, 10000000} {
+		cfg := legacyCfg()
+		cfg.CreditLegacyMinPower = minPower
+		p := CreditMaxParamsFrom(cfg)
 
-	if got := EvaluateCredit(p, InvestSplit{Before: 1, Total: 1}); !got.Legacy || got.Max != 50000 {
-		t.Fatalf("before=1 with threshold 1 should be legacy 50000, got legacy=%v max=%v", got.Legacy, got.Max)
-	}
-	if got := EvaluateCredit(p, InvestSplit{}); got.Legacy {
-		t.Fatal("zero invest must never qualify as legacy")
+		for _, before := range []float64{1, 5000, 9999, 100000} {
+			got := EvaluateCredit(p, InvestSplit{Before: before, Total: before})
+			if !got.Legacy || got.Max != 50000 {
+				t.Fatalf("min=%v before=%v want legacy 50000, got legacy=%v max=%v",
+					minPower, before, got.Legacy, got.Max)
+			}
+		}
+		if got := EvaluateCredit(p, InvestSplit{}); got.Legacy {
+			t.Fatalf("min=%v zero invest must never qualify as legacy", minPower)
+		}
 	}
 }

@@ -13,22 +13,28 @@ import (
 //
 // 唯一输入是「订单投入在分界时刻前后的切分」，额度由此推导，不依赖任何用户状态字段：
 //
-//	分界前投入合计 ≥ 门槛  →  老会员   max = 固定上限 + 分界后投入 × 杠杆
-//	否则                  →  普通会员  max = 分界前投入 × 杠杆
+//	分界前有过投入（金额不限）  →  老会员   max = 固定上限（5 万） + 分界后达标投入 × 杠杆
+//	分界前无投入              →  普通会员  max = 分界后达标投入 × 杠杆
 //
-// 计入口径：只统计「单笔 sales ≥ LegacyMin（默认 1 万）」的自费订单。
-// 多笔小额（每笔都 < 1 万）即使合计很大，也不抬高 Max。
+// 这是「只影响新投入」的落点：
 //
-// 分界后合计仍受 CountedAfter 门槛约束（不足门槛视为 0，不按比例折算）：
+//	分界前（历史）：只判断「有没有投过」，不看金额。投 5000 和投 10 万都是 5 万，
+//	               不存在按比例折算、也不存在阶梯 —— 历史就是固定的 5 万上限。
+//	分界后（新单）：只认单笔 ≥ LegacyMin（默认 1 万）的订单，且合计不足门槛视为 0
+//	               （不按比例折算），所以多笔小额抬不动 Max。
 //
-//	A：T 前单笔 ≥1 万 + T 后仅有小额  →  老会员  50000 + 0
-//	B：T 前无大单、T 后单笔 2 万       →  普通会员 20000×5 = 100000
+// 例：
+//
+//	A：T 前投过任意金额 + T 后全是小额  →  老会员  50000 + 0 = 50000
+//	B：T 前没投过、T 后单笔 2 万        →  普通会员 0 + 20000×5 = 100000
+//	C：T 前投过 10 万 + T 后单笔 2 万    →  老会员  50000 + 100000 = 150000
 //
 // 不固化「老会员资格」快照的原因：
 //
 //  1. loadInvestSplit 统计 status IN (8, 9)，已结束订单同样计入 Before，
 //     所以订单到期不会让 Before 归零，额度不会回弹；
 //  2. 资格与额度来自同一个 split，不存在「打标口径 / 算额度口径」两套规则。
+//     另有一份 CreditMaxFloor 只做「旧最大额度」保底，见 credit_service.go。
 const (
 	defaultCreditLegacyMinPower = 10000.0
 	defaultCreditLegacyMax      = 50000.0
@@ -38,7 +44,7 @@ const (
 type CreditMaxParams struct {
 	Leverage     float64   // 杠杆倍数
 	LegacyMax    float64   // 老会员固定上限基数
-	LegacyMin    float64   // 单笔计入门槛（默认 1 万）；也用于老会员分界前合计门槛
+	LegacyMin    float64   // 分界后单笔计入门槛（默认 1 万）；不参与老会员资格判定
 	LegacyActive bool      // 是否启用分界（未配置分界时刻时为 false）
 	Cutoff       time.Time // 分界时刻
 }
@@ -59,34 +65,36 @@ func CreditMaxParamsFrom(cfg *types.SystemConfig) CreditMaxParams {
 	return p
 }
 
-// InvestSplit 自投在分界时刻前后的切分；Before + After 恒等于 Total
+// InvestSplit 自投在分界时刻前后的切分。
+//
+//	Before       分界前合计（不设任何门槛）  → 只用来判断「是不是老会员」，不看金额大小
+//	After        分界后合计（不设单笔门槛）  → 只用于排查/展示，不直接参与额度
+//	AfterCounted 分界后「单笔 ≥ 门槛」的合计 → 新规则口径，T 后新单只认这个
+//
+// Before + After 恒等于 Total；小额新单会进 After 但不进 AfterCounted，
+// 所以它们既不会抬高新额度，也不会被误算成历史投入。
 type InvestSplit struct {
-	Before float64
-	After  float64
-	Total  float64
+	Before       float64
+	After        float64
+	AfterCounted float64
+	Total        float64
 }
 
-// IsLegacyInvest 老会员资格：分界前投入合计达到门槛。
-// 必须要求 Before > 0，否则门槛配成 0 时「从未投入」的新用户也会被判成老会员白拿固定上限。
+// IsLegacyInvest 老会员资格：分界前有过任意投入即可。
+//
+// 这里刻意不比较金额：老会员的额度是「固定上限」，投 5000 和投 10 万拿到的都是 5 万。
+// 唯一必须守住的是 Before > 0 —— 否则从没投过的新用户也会白拿固定上限。
 func IsLegacyInvest(p CreditMaxParams, split InvestSplit) bool {
-	return p.LegacyActive && split.Before > 0 && split.Before >= p.LegacyMin
+	return p.LegacyActive && split.Before > 0
 }
 
-// CountedAfter 参与额度计算的分界后投入。
-// 合计不足 LegacyMin 视为 0（不按比例折算）；与 loadInvestSplit 的「单笔门槛」互补。
+// CountedAfter 参与新规则额度计算的分界后投入。
+// 单笔门槛已由 loadInvestSplit 在 SQL 里过滤，这里只补「合计不足门槛视为 0」（不按比例折算）。
 func CountedAfter(p CreditMaxParams, split InvestSplit) float64 {
-	if p.LegacyMin > 0 && split.After < p.LegacyMin {
+	if p.LegacyMin > 0 && split.AfterCounted < p.LegacyMin {
 		return 0
 	}
-	return split.After
-}
-
-// CountedBefore 参与额度计算的分界前投入（非老会员路径用）；不足门槛视为 0。
-func CountedBefore(p CreditMaxParams, split InvestSplit) float64 {
-	if p.LegacyMin > 0 && split.Before < p.LegacyMin {
-		return 0
-	}
-	return split.Before
+	return split.AfterCounted
 }
 
 // CreditSnapshot 额度推导结果，供落库与前端解释额度构成共用
@@ -98,7 +106,13 @@ type CreditSnapshot struct {
 	Split        InvestSplit // 投入原始切分
 }
 
-// EvaluateCredit 纯函数：策略参数 + 投入切分 → 额度构成
+// EvaluateCredit 纯函数：策略参数 + 投入切分 → 额度构成。
+//
+//	老会员（T 前有任何投入）: 固定上限 + T 后达标投入 × 杠杆
+//	否则                    :                      T 后达标投入 × 杠杆
+//
+// 老会员那条是「固定」的：T 前投 5000、投 10 万，结果都是 5 万。
+// 想多拿额度只能靠 T 之后的新单（单笔 ≥ 门槛），历史投入不再参与乘法。
 func EvaluateCredit(p CreditMaxParams, split InvestSplit) CreditSnapshot {
 	after := CountedAfter(p, split)
 	if IsLegacyInvest(p, split) {
@@ -110,9 +124,8 @@ func EvaluateCredit(p CreditMaxParams, split InvestSplit) CreditSnapshot {
 			Split:        split,
 		}
 	}
-	before := CountedBefore(p, split)
 	return CreditSnapshot{
-		Max:          round6((before + after) * p.Leverage),
+		Max:          round6(after * p.Leverage),
 		CountedAfter: after,
 		Split:        split,
 	}
@@ -123,37 +136,52 @@ func CalcCreditMax(p CreditMaxParams, split InvestSplit) float64 {
 	return EvaluateCredit(p, split).Max
 }
 
-// loadInvestSplit 统计用户「自费且单笔达标」投入（在投 + 已结束），并按分界时刻切分。
-// 排除 gift / credit_gift；排除单笔 sales < LegacyMin 的小额单（不抬高 Max）。
+// loadInvestSplit 一次性取出三份口径（Before / After / AfterCounted），排除 gift / credit_gift。
+// 分界前不看单笔门槛（历史）；分界后额外算一份「单笔达标」的合计给新规则用。
 func (s *CreditService) loadInvestSplit(tx *gorm.DB, userId uint, p CreditMaxParams) (InvestSplit, error) {
 	var split InvestSplit
 	if tx == nil {
 		tx = s.db
 	}
-	minSales := p.LegacyMin
-	if minSales <= 0 {
-		minSales = defaultCreditLegacyMinPower
-	}
 	base := func() *gorm.DB {
 		return tx.Model(&model.Order{}).
-			Where("user_id = ? AND sales >= ? AND status IN ?", userId, minSales,
+			Where("user_id = ? AND sales > 0 AND status IN ?", userId,
 				[]int{int(types.OrderZyz), int(types.OrderYjs)}).
 			Where("(pay_way IS NULL OR pay_way = '' OR pay_way NOT IN ?)",
 				[]string{"gift", "credit_gift"})
 	}
-	if err := base().Select("COALESCE(SUM(sales), 0)").Scan(&split.Total).Error; err != nil {
+	sum := func(q *gorm.DB, dst *float64) error {
+		return q.Select("COALESCE(SUM(sales), 0)").Scan(dst).Error
+	}
+
+	if err := sum(base(), &split.Total); err != nil {
 		return split, err
 	}
-	if p.LegacyActive {
-		if err := base().Where("created_at >= ?", p.Cutoff).
-			Select("COALESCE(SUM(sales), 0)").Scan(&split.After).Error; err != nil {
+	if !p.LegacyActive {
+		// 未配置分界：所有订单都算「新单」，只按单笔门槛口径计
+		split.After = split.Total
+		minSales := p.LegacyMin
+		if minSales <= 0 {
+			minSales = defaultCreditLegacyMinPower
+		}
+		if err := sum(base().Where("sales >= ?", minSales), &split.AfterCounted); err != nil {
 			return split, err
 		}
-	} else {
-		// 未启用分界：全部视为「分界后」，等价于当前机制
-		split.After = split.Total
+		return split, nil
 	}
-	split.Before = round6(split.Total - split.After)
+
+	if err := sum(base().Where("created_at < ?", p.Cutoff), &split.Before); err != nil {
+		return split, err
+	}
+	split.Before = round6(split.Before)
+	split.After = round6(split.Total - split.Before)
+	minSales := p.LegacyMin
+	if minSales <= 0 {
+		minSales = defaultCreditLegacyMinPower
+	}
+	if err := sum(base().Where("created_at >= ? AND sales >= ?", p.Cutoff, minSales), &split.AfterCounted); err != nil {
+		return split, err
+	}
 	return split, nil
 }
 

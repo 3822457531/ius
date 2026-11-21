@@ -117,9 +117,12 @@ func main() {
 			if !db.Migrator().HasColumn(&model.User{}, "last_sign_in_date") {
 				_ = db.Migrator().AddColumn(&model.User{}, "LastSignInDate")
 			}
-			// 授信额度三字段
+			// 授信额度字段
 			if !db.Migrator().HasColumn(&model.User{}, "credit_max") {
 				_ = db.Migrator().AddColumn(&model.User{}, "CreditMax")
+			}
+			if !db.Migrator().HasColumn(&model.User{}, "credit_max_floor") {
+				_ = db.Migrator().AddColumn(&model.User{}, "CreditMaxFloor")
 			}
 			if !db.Migrator().HasColumn(&model.User{}, "credit_available") {
 				_ = db.Migrator().AddColumn(&model.User{}, "CreditAvailable")
@@ -213,6 +216,17 @@ func main() {
 		fx.Provide(service.NewWebsocketService),
 		fx.Provide(service.NewUserService),
 		fx.Provide(service.NewCreditService),
+
+		// 授信保底回填：新规则上线把历史小额单剔除后，一批老用户的 credit_max 被打成 0。
+		// 启动后后台补一次 Floor 并恢复额度（幂等；无候选时只跑一条查询），
+		// 避免用户必须再下一单才看到额度回来。
+		fx.Invoke(func(svc *service.CreditService) {
+			go func() {
+				if _, err := svc.BackfillCreditMaxFloor(nil); err != nil {
+					log.Printf("授信保底回填失败: %v", err)
+				}
+			}()
+		}),
 
 		// 邮件服务
 		fx.Provide(service.NewSmtpService),

@@ -44,10 +44,14 @@ func TestCreditMySQLIntegration(t *testing.T) {
 		t.Fatalf("mysql: %v", err)
 	}
 
-	// 确认授信列已存在
+	// 确认授信列已存在（缺 floor 时自动补，避免联调环境未重启）
+	if !db.Migrator().HasColumn(&model.User{}, "credit_max_floor") {
+		_ = db.Migrator().AddColumn(&model.User{}, "CreditMaxFloor")
+	}
 	if !db.Migrator().HasColumn(&model.User{}, "credit_max") ||
 		!db.Migrator().HasColumn(&model.User{}, "credit_available") ||
-		!db.Migrator().HasColumn(&model.User{}, "credit_debt") {
+		!db.Migrator().HasColumn(&model.User{}, "credit_debt") ||
+		!db.Migrator().HasColumn(&model.User{}, "credit_max_floor") {
 		t.Fatal("credit columns missing on chatgpt_users — restart backend once to migrate")
 	}
 

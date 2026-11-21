@@ -52,7 +52,11 @@ func (s *CreditService) RecalcMax(tx *gorm.DB, userId uint, cfg *types.SystemCon
 }
 
 // RecalcMaxAndSnapshot 同 RecalcMax，并返回推导出的额度构成，供调用方解释额度来源。
-// 最大额度 = 自费投入推导基数 − 累计授信报单消耗；可用额度不超过最大额度。
+//
+//	最大额度 = max(新规则基数, CreditMaxFloor) − 累计授信报单消耗
+//
+// Floor 是「历史基数的快照」，只升不降：
+// 新规则上线后老会员的历史投入仍按固定 5 万计，不会被「单笔≥1万」的门槛清零。
 func (s *CreditService) RecalcMaxAndSnapshot(tx *gorm.DB, userId uint, cfg *types.SystemConfig) (CreditSnapshot, error) {
 	if tx == nil {
 		tx = s.db
@@ -64,7 +68,7 @@ func (s *CreditService) RecalcMaxAndSnapshot(tx *gorm.DB, userId uint, cfg *type
 
 	var user model.User
 	if err := lockRow(tx).
-		Select("id", "username", "credit_max", "credit_available").
+		Select("id", "username", "credit_max", "credit_available", "credit_max_floor").
 		First(&user, userId).Error; err != nil {
 		return CreditSnapshot{}, err
 	}
@@ -74,12 +78,24 @@ func (s *CreditService) RecalcMaxAndSnapshot(tx *gorm.DB, userId uint, cfg *type
 		return CreditSnapshot{}, err
 	}
 	snap := EvaluateCredit(params, split)
+	investBase := snap.Max // 投入侧基数（未扣报单消耗）
 
 	spent, err := s.loadCreditSpent(tx, userId)
 	if err != nil {
 		return CreditSnapshot{}, err
 	}
-	finalMax := round6(snap.Max - spent)
+
+	oldMax := round6(user.CreditMax)
+	floor := round6(user.CreditMaxFloor)
+	freeze := true // 能否把 floor 固化到库里
+	if floor <= 0 {
+		floor, freeze = s.resolveFloor(tx, userId, investBase, oldMax, spent)
+	}
+	if investBase > floor {
+		floor = investBase
+	}
+
+	finalMax := round6(floor - spent)
 	if finalMax < 0 {
 		finalMax = 0
 	}
@@ -89,17 +105,22 @@ func (s *CreditService) RecalcMaxAndSnapshot(tx *gorm.DB, userId uint, cfg *type
 	if newAvail > snap.Max {
 		newAvail = snap.Max
 	}
-	oldMax := round6(user.CreditMax)
-	if oldMax == snap.Max && round6(user.CreditAvailable) == newAvail {
+	// 未固化时不能把本次结果当基线，否则一次读取失败就被写死
+	floorChanged := freeze && round6(user.CreditMaxFloor) != floor
+	if oldMax == snap.Max && round6(user.CreditAvailable) == newAvail && !floorChanged {
 		return snap, nil
 	}
-	if err := tx.Model(&model.User{}).Where("id = ?", userId).Updates(map[string]interface{}{
+	updates := map[string]interface{}{
 		"credit_max":       snap.Max,
 		"credit_available": newAvail,
-	}).Error; err != nil {
+	}
+	if freeze {
+		updates["credit_max_floor"] = floor
+	}
+	if err := tx.Model(&model.User{}).Where("id = ?", userId).Updates(updates).Error; err != nil {
 		return CreditSnapshot{}, err
 	}
-	// 最大额度变动记明细，便于前端「授信明细」分别展示增减
+	// 最大额度变动记明细（Floor 恢复导致的回升也会记「增加」）
 	deltaMax := round6(snap.Max - oldMax)
 	if deltaMax > 0 {
 		_ = tx.Create(&model.PowerLog{
@@ -127,6 +148,52 @@ func (s *CreditService) RecalcMaxAndSnapshot(tx *gorm.DB, userId uint, cfg *type
 		}).Error
 	}
 	return snap, nil
+}
+
+// resolveFloor 计算本轮的投入侧基数，并给出「能否把结果固化到 credit_max_floor」。
+//
+//	floor = max(新规则基数, 被打成 0 前的额度)
+//
+// 第二项有两个证据来源，谁大取谁：
+//
+//	oldMax + spent  —— 额度还在或仍有报单消耗时，反推出基线
+//	wipedBase       —— 已被打成 0 时，用「最大额度减少」的流水金额（订单被清理也兜得住）
+//
+// 返回 ok=false 表示证据读不到（查询失败）。此时仍然用新规则基数跑完本次计算，
+// 但**不落库**：floor 一旦写入就只升不降，把一次抖动的结果写死等于永久丢额度。
+func (s *CreditService) resolveFloor(tx *gorm.DB, userId uint, investBase, oldMax, spent float64) (floor float64, ok bool) {
+	floor = investBase
+	if oldMax > 0 || spent > 0 {
+		if v := round6(oldMax + spent); v > floor {
+			floor = v
+		}
+		return round6(floor), true
+	}
+	// 已归零：没有任何流水痕迹说明是全新用户，不能凭空给额度
+	wiped, ok := s.loadWipedBase(tx, userId)
+	if !ok {
+		return round6(floor), false
+	}
+	if wiped > floor {
+		floor = wiped
+	}
+	return round6(floor), true
+}
+
+// loadWipedBase 取历史「最大额度减少」流水的最大单笔金额：被打成 0 的那一刻，它就是原本的额度。
+// 用作保守下限（减少额不会超过当时的基数），订单被清理/改状态后仍能兜住历史额度。
+func (s *CreditService) loadWipedBase(tx *gorm.DB, userId uint) (float64, bool) {
+	if tx == nil {
+		tx = s.db
+	}
+	var v float64
+	if err := tx.Model(&model.PowerLog{}).
+		Where("user_id = ? AND model = ? AND mark = ? AND deleted_at IS NULL",
+			userId, CreditLogModelMaxDown, types.PowerSub).
+		Select("COALESCE(MAX(amount), 0)").Scan(&v).Error; err != nil {
+		return 0, false
+	}
+	return round6(v), true
 }
 
 // loadCreditSpent 累计已消耗的授信报单额度（用多少扣多少最大额度，还款不回补）
@@ -226,6 +293,10 @@ func (s *CreditService) SpendForGift(tx *gorm.DB, userId uint, username string, 
 	amount = round6(amount)
 	if userId == 0 || amount <= 0 {
 		return fmt.Errorf("授信报单金额无效")
+	}
+	// 先固化 Floor，避免「先写消耗流水再 bootstrap」把 Floor 抬成 oldMax+新spent
+	if err := s.RecalcMax(tx, userId, cfg); err != nil {
+		return err
 	}
 	res := tx.Model(&model.User{}).
 		Where("id = ? AND credit_available >= ?", userId, amount).
