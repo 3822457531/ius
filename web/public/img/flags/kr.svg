@@ -1,0 +1,23 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 40">
+  <rect width="60" height="40" fill="#fff" stroke="#ddd" stroke-width="0.5"/>
+  <g transform="translate(30,20)">
+    <path d="M0,-8 A8,8 0 0,1 0,8 Z" fill="#CD2E3A"/>
+    <path d="M0,-8 A8,8 0 0,0 0,8 Z" fill="#0047A0"/>
+    <circle cx="-3.2" cy="0" r="3.2" fill="#CD2E3A"/>
+    <circle cx="3.2" cy="0" r="3.2" fill="#0047A0"/>
+  </g>
+  <g stroke="#000" stroke-width="1.4" stroke-linecap="round">
+    <line x1="12" y1="8" x2="20" y2="14"/>
+    <line x1="10.2" y1="10.2" x2="18.2" y2="16.2"/>
+    <line x1="8.4" y1="12.4" x2="16.4" y2="18.4"/>
+    <line x1="40" y1="8" x2="48" y2="14"/>
+    <line x1="41.8" y1="10.2" x2="49.8" y2="16.2"/>
+    <line x1="43.6" y1="12.4" x2="51.6" y2="18.4"/>
+    <line x1="12" y1="32" x2="20" y2="26"/>
+    <line x1="10.2" y1="29.8" x2="18.2" y2="23.8"/>
+    <line x1="8.4" y1="27.6" x2="16.4" y2="21.6"/>
+    <line x1="40" y1="32" x2="48" y2="26"/>
+    <line x1="41.8" y1="29.8" x2="49.8" y2="23.8"/>
+    <line x1="43.6" y1="27.6" x2="51.6" y2="21.6"/>
+  </g>
+</svg>

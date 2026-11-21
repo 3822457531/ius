@@ -1,0 +1,835 @@
+@keyframes rotate {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes pulse {
+  0% {
+    transform: scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1.5);
+    opacity: 0;
+  }
+}
+
+.mobile-mj
+  position relative
+  min-height 100vh
+  background linear-gradient(135deg, #4facfe 0%, #00f2fe 50%, #43e97b 100%)
+  font-family 'Plus Jakarta Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif
+
+  &.mobile-mj-standalone
+    // ChatGPT / AI Studio 风格：浅底、干净卡片、无彩虹渐变
+    padding-bottom calc(24px + env(safe-area-inset-bottom, 0px))
+    background: radial-gradient(ellipse 80% 45% at 0% 0%, rgba(15, 118, 110, 0.07), transparent 55%), radial-gradient(ellipse 70% 40% at 100% 0%, rgba(37, 99, 235, 0.05), transparent 50%), #f4f5f7
+    color #111827
+    &:before, &:after
+      display none
+
+    .text-line
+      background #fff
+      border 1px solid rgba(17, 24, 39, 0.08)
+      box-shadow 0 1px 3px rgba(17, 24, 39, 0.04), 0 8px 24px rgba(17, 24, 39, 0.04)
+      backdrop-filter none
+
+    .mj-prompt-card
+      padding 14px 14px 12px
+      border-radius 18px !important
+      border 1px solid rgba(17, 24, 39, 0.08) !important
+      background #fff !important
+      box-shadow 0 1px 3px rgba(17, 24, 39, 0.04), 0 8px 24px rgba(17, 24, 39, 0.04) !important
+      backdrop-filter none
+      &::before
+        display none
+      .mj-prompt-card__tpl
+        border-bottom-color rgba(17, 24, 39, 0.06)
+      .mj-prompt-card__tpl-label
+        color #6b7280
+        letter-spacing 0.06em
+        &::before
+          background #0f766e
+      .mj-prompt-tpl-chip
+        background #f3f4f6
+        border-color transparent
+        color #374151
+        &--active, &.mj-prompt-tpl-chip--active
+          background #111827
+          color #fff
+          border-color #111827
+
+    .van-button--primary, .text-line .van-button
+      background #111827 !important
+      border none !important
+      box-shadow 0 8px 20px rgba(17, 24, 39, 0.18) !important
+      font-weight 700
+      letter-spacing 0.01em
+      border-radius 14px
+
+    h3
+      color #111827
+      font-weight 700
+      letter-spacing (-0.01em)
+
+    .running-strip
+      background #fff
+      border 1px solid rgba(17, 24, 39, 0.08)
+      box-shadow 0 1px 3px rgba(17, 24, 39, 0.04)
+
+  color #2c3e50
+  padding 18px 16px
+  &:before
+    content ''
+    position fixed
+    inset 0
+    background radial-gradient(800px 800px at 15% 25%, rgba(255, 255, 255, 0.15), transparent 55%), radial-gradient(700px 700px at 85% 10%, rgba(255, 255, 255, 0.12), transparent 55%), radial-gradient(600px 600px at 70% 80%, rgba(255, 255, 255, 0.1), transparent 65%)
+    pointer-events none
+    z-index 0
+  &:after
+    content ''
+    position fixed
+    inset 0
+    background linear-gradient(135deg, rgba(255,255,255,0.1) 0%, transparent 30%, rgba(255,255,255,0.08) 60%, transparent 100%)
+    pointer-events none
+    z-index 0
+
+  .text-line
+    position relative
+    z-index 1
+    padding 12px
+    font-size 14px
+    background rgba(255,255,255,0.95)
+    border 1px solid rgba(255,255,255,0.8)
+    border-radius 16px
+    margin-bottom 12px
+    box-shadow 0 4px 16px rgba(0,0,0,0.1)
+    backdrop-filter blur(10px)
+
+    .van-row
+      .van-col
+        .rate
+          display flex
+          justify-content center
+          background rgba(255,255,255,0.9)
+          padding 8px 12px
+          margin 5px 0
+          border-radius 12px
+          flex-flow column
+          border 1px solid rgba(79,172,254,0.2)
+          transition all 0.3s ease
+          cursor pointer
+
+          .icon
+            text-align center
+
+            .van-image
+              max-width 20px
+
+          .text
+            text-align center
+            color #2c3e50
+            font-weight 600
+
+          &:hover
+            transform translateY(-2px)
+            box-shadow 0 4px 12px rgba(79,172,254,0.2)
+
+        .model
+          display flex
+          justify-content center
+          background rgba(255,255,255,0.9)
+          padding 8px
+          margin 5px 0
+          border-radius 12px
+          flex-flow column
+          border 1px solid rgba(79,172,254,0.2)
+          transition all 0.3s ease
+          cursor pointer
+
+          .icon
+            text-align center
+
+            .van-image
+              width 100%
+              height 50px
+              border-radius 8px
+
+          .text
+            text-align center
+            color #2c3e50
+            font-weight 600
+            margin-top 6px
+
+          &:hover
+            transform translateY(-2px)
+            box-shadow 0 4px 12px rgba(79,172,254,0.2)
+
+        .active
+          background linear-gradient(135deg, rgba(79,172,254,0.2), rgba(67,233,123,0.2))
+          border-color #4facfe
+          box-shadow 0 4px 16px rgba(79,172,254,0.3)
+
+    .van-button
+      position relative
+      background linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+      border none
+      color #fff
+      font-weight 700
+      border-radius 12px
+      box-shadow 0 4px 16px rgba(102,126,234,0.3)
+
+      .van-tag
+        position absolute
+        right 20px
+        background rgba(255,255,255,0.2)
+        color #fff
+        border none
+
+    .align-right
+      display flex
+      justify-content right
+
+  .mj-prompt-card
+    padding 0
+    overflow hidden
+    position relative
+    border-radius 22px !important
+    border 1px solid rgba(255, 255, 255, 0.85) !important
+    background linear-gradient(168deg, rgba(255, 255, 255, 0.99) 0%, rgba(248, 251, 255, 0.96) 45%, rgba(242, 248, 252, 0.98) 100%) !important
+    box-shadow 0 12px 40px rgba(20, 60, 100, 0.1), 0 4px 14px rgba(79, 172, 254, 0.08), inset 0 1px 0 rgba(255, 255, 255, 1), inset 0 0 0 1px rgba(255, 255, 255, 0.5) !important
+    backdrop-filter blur(14px)
+
+    &::before
+      content ''
+      position absolute
+      left 10%
+      right 10%
+      top 0
+      height 1px
+      background linear-gradient(90deg, transparent, rgba(79, 172, 254, 0.35), transparent)
+      border-radius 1px
+      pointer-events none
+      opacity 0.9
+
+    :deep(.van-field)
+      background transparent
+      border none
+      border-radius 0
+
+    &__model
+      padding 14px 14px 12px
+      position relative
+      z-index 1
+
+    &__model-head
+      margin-bottom 12px
+      display flex
+      align-items center
+      justify-content space-between
+
+    &__model-label
+      display inline-flex
+      align-items center
+      gap 8px
+      font-size 11px
+      font-weight 800
+      letter-spacing 0.12em
+      text-transform uppercase
+      color #5a6c7d
+      &::before
+        content ''
+        width 4px
+        height 14px
+        border-radius 3px
+        background linear-gradient(180deg, #4facfe, #667eea)
+
+    &__tpl
+      padding 14px 14px 10px
+      position relative
+      z-index 1
+      border-bottom 1px solid rgba(79, 172, 254, 0.08)
+
+    &__tpl-head
+      display flex
+      align-items baseline
+      justify-content space-between
+      gap 8px
+      margin-bottom 10px
+
+    &__tpl-label
+      display inline-flex
+      align-items center
+      gap 8px
+      font-size 11px
+      font-weight 800
+      letter-spacing 0.12em
+      text-transform uppercase
+      color #5a6c7d
+      &::before
+        content ''
+        width 4px
+        height 14px
+        border-radius 3px
+        background linear-gradient(180deg, #4facfe, #667eea)
+
+    &__tpl-hint
+      font-size 11px
+      font-weight 600
+      color #8b9bab
+      white-space nowrap
+
+    .mj-prompt-tpl-scroll
+      display flex
+      flex-wrap nowrap
+      gap 8px
+      overflow-x auto
+      overflow-y hidden
+      padding 2px 2px 6px
+      -webkit-overflow-scrolling touch
+      scrollbar-width none
+      &::-webkit-scrollbar
+        display none
+
+    .mj-prompt-tpl-chip
+      flex 0 0 auto
+      margin 0
+      padding 8px 12px
+      border none
+      border-radius 999px
+      cursor pointer
+      font-size 12px
+      font-weight 700
+      letter-spacing 0.02em
+      color #4a5d6e
+      background rgba(255, 255, 255, 0.85)
+      border 1px solid rgba(79, 172, 254, 0.18)
+      box-shadow 0 1px 4px rgba(79, 172, 254, 0.08)
+      transition background 0.18s ease, color 0.18s ease, border-color 0.18s ease, transform 0.12s ease
+      -webkit-tap-highlight-color transparent
+      &:active
+        transform scale(0.97)
+      &--active
+        color #fff
+        background linear-gradient(135deg, #4facfe 0%, #667eea 100%)
+        border-color transparent
+        box-shadow 0 4px 12px rgba(79, 172, 254, 0.35)
+
+    .mj-model-segment
+      display flex
+      gap 8px
+      padding 6px
+      border-radius 18px
+      background linear-gradient(165deg, rgba(230, 240, 250, 0.55) 0%, rgba(255, 255, 255, 0.75) 100%)
+      box-shadow inset 0 2px 6px rgba(79, 172, 254, 0.07), inset 0 -1px 0 rgba(255, 255, 255, 0.9), 0 1px 3px rgba(0, 0, 0, 0.04)
+      border 1px solid rgba(255, 255, 255, 0.9)
+
+    .mj-model-chip
+      position relative
+      flex 1
+      min-width 0
+      display flex
+      flex-direction row
+      align-items center
+      justify-content flex-start
+      gap 11px
+      padding 11px 12px 11px 11px
+      margin 0
+      border none
+      border-radius 14px
+      cursor pointer
+      font inherit
+      text-align left
+      color #5d6d7e
+      background rgba(255, 255, 255, 0.35)
+      border 1px solid rgba(255, 255, 255, 0.65)
+      box-shadow 0 1px 2px rgba(0, 0, 0, 0.03)
+      transition background 0.22s ease, border-color 0.22s ease, box-shadow 0.22s ease, color 0.22s ease, transform 0.12s ease
+      -webkit-tap-highlight-color transparent
+      &:active
+        transform scale(0.985)
+
+      &__thumb
+        flex 0 0 auto
+        display flex
+        border-radius 12px
+        overflow hidden
+        box-shadow 0 2px 10px rgba(0, 0, 0, 0.1)
+        :deep(.van-image)
+          display block
+
+      &__meta
+        flex 1
+        min-width 0
+        display flex
+        flex-direction column
+        align-items flex-start
+        gap 3px
+
+      &__name
+        font-size 15px
+        font-weight 800
+        letter-spacing 0.03em
+        color #2c3e50
+
+      &__blurb
+        font-size 11px
+        font-weight 600
+        letter-spacing 0.02em
+        color #8b9bab
+        line-height 1.3
+
+      &__tick
+        position absolute
+        top 8px
+        right 8px
+        font-size 16px
+        color #22c55e
+        filter drop-shadow(0 1px 2px rgba(34, 197, 94, 0.35))
+
+      &--active
+        color #1a252f
+        background linear-gradient(135deg, rgba(255, 255, 255, 1) 0%, rgba(245, 250, 255, 0.98) 100%)
+        border-color rgba(79, 172, 254, 0.45)
+        box-shadow 0 6px 22px rgba(79, 172, 254, 0.22), 0 0 0 1px rgba(255, 255, 255, 0.95) inset, 0 1px 0 rgba(255, 255, 255, 0.8) inset
+        .mj-model-chip__thumb
+          box-shadow 0 4px 16px rgba(79, 172, 254, 0.32)
+        .mj-model-chip__name
+          color #1a252f
+        .mj-model-chip__blurb
+          color #5a7a94
+
+      &:not(.mj-model-chip--active)
+        .mj-model-chip__name
+          color #4a5f73
+        &:hover
+          border-color rgba(79, 172, 254, 0.22)
+          background rgba(255, 255, 255, 0.55)
+
+    &__prompt
+      border-top 1px solid rgba(79, 172, 254, 0.08)
+
+    &__prompt :deep(.van-cell)
+      padding 12px 16px 10px
+      background transparent
+      &::after
+        display none
+
+    &__prompt :deep(.van-field__control)
+      min-height 96px
+      font-size 15px
+      line-height 1.55
+      letter-spacing 0.01em
+      color #2c3e50
+      &::placeholder
+        color #a8b8c8
+
+    &__ref
+      padding 12px 14px 14px
+      margin 0 10px 10px
+      border-radius 14px
+      border 1px solid rgba(79, 172, 254, 0.1)
+      background linear-gradient(180deg, rgba(255, 255, 255, 0.65) 0%, rgba(248, 251, 255, 0.92) 100%)
+      box-shadow inset 0 1px 0 rgba(255, 255, 255, 0.85)
+
+    &__hint
+      margin 0 0 10px
+      padding-left 2px
+      font-size 12px
+      line-height 1.5
+      color #6b7c8c
+      font-weight 500
+
+    :deep(.van-uploader__preview-image),
+    :deep(.van-uploader__upload)
+      border-radius 12px
+
+  h3
+    position relative
+    z-index 1
+    font-size 20px
+    font-weight 800
+    color #2c3e50
+    margin 20px 0 12px
+    padding-bottom 8px
+    border-bottom 2px solid rgba(79,172,254,0.3)
+
+  .tip-text
+    padding 12px
+    line-height 1.5
+    color #7f8c8d
+    background rgba(255,255,255,0.6)
+    border-radius 12px
+    font-size 13px
+
+  .running-strip
+    position relative
+    z-index 1
+    background rgba(255,255,255,0.95)
+    border 1px solid rgba(255,255,255,0.8)
+    border-radius 16px
+    padding 10px 12px 12px
+    margin-bottom 14px
+    box-shadow 0 2px 12px rgba(0,0,0,0.08)
+    backdrop-filter blur(10px)
+
+    &__row
+      display flex
+      align-items center
+      justify-content space-between
+      gap 8px
+      margin-bottom 6px
+
+    &__title
+      font-size 15px
+      font-weight 700
+      color #2c3e50
+
+    &__empty
+      margin 0
+      padding 4px 0 2px
+      font-size 13px
+      color #95a5a6
+      line-height 1.4
+
+    &__scroll
+      overflow-x auto
+      overflow-y hidden
+      -webkit-overflow-scrolling touch
+      margin 0 -4px
+      padding 2px 4px 0
+      scrollbar-width none
+      &::-webkit-scrollbar
+        display none
+
+    &__track
+      display flex
+      flex-direction row
+      gap 10px
+      padding-bottom 2px
+
+    &__cell
+      flex 0 0 auto
+      width 56px
+
+    .running-thumb-wrap--strip
+      position relative
+      width 56px
+      height 56px
+      border-radius 10px
+      overflow hidden
+      background rgba(245, 247, 250, 0.95)
+      box-shadow 0 1px 6px rgba(0,0,0,0.08)
+      .van-image
+        position absolute
+        inset 0
+        width 100%
+        height 100%
+
+      .progress
+        display flex
+        justify-content center
+        align-items center
+        width 100%
+        height 100%
+        background rgba(0, 0, 0, 0.45)
+        position absolute
+        left 0
+        top 0
+        border-radius 10px
+        .van-circle__text
+          color #ffffff
+          font-size 11px !important
+
+    .task-in-queue--strip
+      width 56px
+      height 56px
+      border-radius 10px
+      display flex
+      align-items center
+      justify-content center
+      background rgba(255,255,255,0.95)
+      border 1px solid rgba(79,172,254,0.15)
+      box-shadow 0 1px 6px rgba(0,0,0,0.06)
+      box-sizing border-box
+      padding 0
+
+      .loading-wrapper
+        display flex
+        flex-direction column
+        align-items center
+        justify-content center
+        gap 4px
+        padding 0
+
+      .icon-container
+        position relative
+        width 34px
+        height 34px
+        display flex
+        align-items center
+        justify-content center
+
+      .loading-icon
+        font-size 20px
+        color #4facfe
+        animation rotate 2s linear infinite
+
+      .pulse-ring
+        position absolute
+        inset 0
+        border 2px solid #4facfe
+        border-radius 50%
+        animation pulse 2s ease-out infinite
+
+      .dots--strip
+        display flex
+        gap 2px
+        justify-content center
+
+      .dots--strip .dot
+        width 3px
+        height 3px
+        border-radius 50%
+        background #7f8c8d
+        opacity 0.35
+        transition opacity 0.3s ease
+        &.active
+          opacity 1
+          background #4facfe
+
+  // end running-strip（桌面端 ImageMj 仍用下方 .running-job-list）
+
+  .running-job-list
+    position relative
+    z-index 1
+    background rgba(255,255,255,0.95)
+    border 1px solid rgba(255,255,255,0.8)
+    border-radius 20px
+    padding 16px
+    margin-bottom 16px
+    box-shadow 0 4px 16px rgba(0,0,0,0.1)
+    backdrop-filter blur(10px)
+
+    .van-grid
+      .van-grid-item
+        .van-grid-item__content
+          padding 0
+          position relative
+          border-radius 12px
+          overflow hidden
+          background rgba(255,255,255,0.9)
+          box-shadow 0 2px 8px rgba(0,0,0,0.08)
+
+          .running-thumb-wrap
+            position relative
+            width 100%
+            aspect-ratio 1
+            border-radius 12px
+            overflow hidden
+            background rgba(245, 247, 250, 0.95)
+            .van-image
+              position absolute
+              inset 0
+              width 100%
+              height 100%
+
+          .progress
+            display flex
+            justify-content center
+            align-items center
+            width 100%
+            height 100%
+            background rgba(0, 0, 0, 0.5)
+            position absolute
+            left 0
+            top 0
+            border-radius 12px
+
+            .van-circle__text
+              color #ffffff
+
+          .task-in-queue
+            display flex
+            flex-flow column
+            justify-content center
+            color #7f8c8d
+            background rgba(255,255,255,0.9)
+            border-radius 12px
+            padding 20px
+            width 100%
+            aspect-ratio 1
+            box-sizing border-box
+            min-height 100px
+
+            .loading-wrapper
+              display flex
+              flex-direction column
+              align-items center
+              gap 12px
+
+              .icon-container
+                position relative
+                width 60px
+                height 60px
+                display flex
+                align-items center
+                justify-content center
+
+                .loading-icon
+                  font-size 32px
+                  color #4facfe
+                  animation rotate 2s linear infinite
+
+                .pulse-ring
+                  position absolute
+                  inset 0
+                  border 2px solid #4facfe
+                  border-radius 50%
+                  animation pulse 2s ease-out infinite
+
+              .text-container
+                display flex
+                align-items center
+                gap 4px
+                font-size 14px
+                color #2c3e50
+                font-weight 600
+
+                .dots
+                  display flex
+                  gap 2px
+                  margin-left 4px
+
+                  .dot
+                    width 4px
+                    height 4px
+                    border-radius 50%
+                    background #7f8c8d
+                    opacity 0.3
+                    transition opacity 0.3s ease
+
+                    &.active
+                      opacity 1
+                      background #4facfe
+
+  .finish-job-list
+    position relative
+    z-index 1
+    background rgba(255,255,255,0.95)
+    border 1px solid rgba(255,255,255,0.8)
+    border-radius 20px
+    padding 16px
+    box-shadow 0 4px 16px rgba(0,0,0,0.1)
+    backdrop-filter blur(10px)
+
+    .van-grid
+      .van-grid-item
+        .van-grid-item__content
+          padding 0
+          border-radius 12px
+          overflow hidden
+          background rgba(255,255,255,0.9)
+          box-shadow 0 2px 8px rgba(0,0,0,0.08)
+          transition all 0.3s ease
+
+          &:hover
+            transform translateY(-2px)
+            box-shadow 0 4px 12px rgba(0,0,0,0.12)
+
+          .job-item
+            overflow hidden
+            border-radius 12px
+            position relative
+            width 100%
+            aspect-ratio 1
+            background rgba(245, 247, 250, 0.95)
+
+            .opt
+              .opt-btn
+                padding 4px 0
+                text-align center
+                border-radius 8px
+                margin 3px 0
+                display block
+                cursor pointer
+                background linear-gradient(135deg, #667eea 0%, #764ba2 100%)
+                color #ffffff
+                font-size 13px
+                font-weight 600
+                width 100%
+                transition all 0.2s ease
+
+                &:hover
+                  transform translateY(-1px)
+                  box-shadow 0 2px 8px rgba(102,126,234,0.3)
+
+            .van-image.job-thumb
+              position absolute
+              inset 0
+              width 100%
+              height 100%
+              border-radius 12px
+              overflow hidden
+              :deep(.van-image__img)
+                object-fit cover
+
+            .van-image.job-thumb.upscale
+              aspect-ratio auto
+              :deep(.van-image__img)
+                object-fit contain
+                background #0f1419
+
+            .remove
+              position absolute
+              right 8px
+              top 8px
+              display flex
+              gap 6px
+              z-index 10
+
+              .el-button
+                margin-left 0
+                height auto
+                padding 6px
+                border-radius 50%
+                box-shadow 0 2px 8px rgba(0,0,0,0.2)
+                transition all 0.2s ease
+
+                &:hover
+                  transform scale(1.1)
+
+  :deep(.van-form)
+    position relative
+    z-index 1
+
+  :deep(.van-tabs)
+    background rgba(255,255,255,0.95)
+    border-radius 16px
+    padding 12px
+    box-shadow 0 4px 16px rgba(0,0,0,0.1)
+
+  :deep(.van-tabs__wrap)
+    border-bottom 1px solid rgba(79,172,254,0.2)
+
+  :deep(.van-tab)
+    color #7f8c8d
+    font-weight 600
+
+    &.van-tab--active
+      color #4facfe
+
+  :deep(.van-tabs__line)
+    background linear-gradient(90deg, #667eea 0%, #764ba2 100%)
+
+  :deep(.van-field)
+    background rgba(255,255,255,0.9)
+    border-radius 12px
+    border 1px solid rgba(79,172,254,0.2)
+
+  :deep(.van-empty)
+    padding 40px 20px

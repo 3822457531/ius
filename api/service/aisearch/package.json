@@ -1,0 +1,17 @@
+{
+  "name": "ius-aisearch",
+  "version": "1.0.0",
+  "private": true,
+  "description": "AI搜 GramJS 侧车（极搜），由 Go /api/ai-search 转发",
+  "scripts": {
+    "start": "node server.js",
+    "login": "node collector/login.js",
+    "login:media": "node collector/login.js --media"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.1045.0",
+    "@aws-sdk/lib-storage": "^3.1064.0",
+    "telegram": "^2.26.22",
+    "tesseract.js": "^6.0.1"
+  }
+}

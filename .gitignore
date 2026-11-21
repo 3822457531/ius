@@ -1,0 +1,52 @@
+# Secrets & local config
+**/.env
+**/.env.*
+!**/.env.example
+!**/.env.*.example
+!**/.env.development
+api/config.toml
+**/config.xml
+**/storage.json
+
+# Binaries & build artifacts
+**/node_modules/
+**/dist/
+**/*.exe
+**/*.dll
+**/*.so
+**/*.dylib
+api/main
+api/output/
+api/bin/
+api/tmp/
+api/chatgpt-plus*
+web/dist.zip
+web/web.zip
+web/*.zip
+web/*.rar
+*.zip
+*.rar
+*.7z
+
+# Caches & IDE
+.gomodcache/
+.vscode/
+.idea/
+.DS_Store
+*.log
+logs/
+
+# Other local / non-app trees
+tg/
+scripts/
+*.pem
+*.key
+!**/certs/**/*.example
+api/certs/
+api/res/certs/
+**/privateKey.txt
+**/*PrivateKey*
+api/static/upload/
+api/service/aisearch/node_modules/
+api/service/aisearch/.env
+api/service/aisearch/session/

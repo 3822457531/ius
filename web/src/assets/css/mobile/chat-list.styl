@@ -1,0 +1,234 @@
+.chat-list-page
+  --ai-bg: #f4f5f7
+  --ai-surface: #ffffff
+  --ai-text: #111827
+  --ai-muted: #6b7280
+  --ai-line: rgba(17, 24, 39, 0.08)
+  --ai-accent: #0f766e
+  position relative
+  min-height 100vh
+  min-height 100dvh
+  background var(--ai-bg)
+  color var(--ai-text)
+  font-family 'Plus Jakarta Sans', 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', sans-serif
+  -webkit-font-smoothing antialiased
+  overflow-x hidden
+
+.layout
+  position relative
+  z-index 1
+  max-width 560px
+  margin 0 auto
+  padding 16px 16px 80px
+  display flex
+  flex-direction column
+  gap 12px
+
+.page-head
+  display flex
+  align-items center
+  justify-content space-between
+  gap 12px
+  padding 4px 0 2px
+
+.page-brand
+  display flex
+  align-items center
+  gap 12px
+  min-width 0
+
+.page-brand__mark
+  flex-shrink 0
+  width 42px
+  height 42px
+  border-radius 14px
+  display flex
+  align-items center
+  justify-content center
+  font-size 12px
+  font-weight 800
+  color #fff
+  background: linear-gradient(145deg, #0f766e 0%, #2563eb 100%)
+  box-shadow 0 8px 20px rgba(15, 118, 110, 0.25)
+
+.page-brand__title
+  margin 0
+  font-size 18px
+  font-weight 800
+  letter-spacing (-0.02em)
+  color var(--ai-text)
+  line-height 1.25
+
+.page-brand__sub
+  margin 3px 0 0
+  font-size 12px
+  color var(--ai-muted)
+
+.page-clear
+  flex-shrink 0
+  display flex
+  align-items center
+  justify-content center
+  width 36px
+  height 36px
+  padding 0
+  border none
+  border-radius 12px
+  background #fff
+  border 1px solid var(--ai-line)
+  color #6b7280
+  cursor pointer
+  -webkit-tap-highlight-color transparent
+  &:active
+    background #f3f4f6
+
+.new-chat-btn
+  display flex
+  align-items center
+  justify-content center
+  gap 6px
+  width 100%
+  height 44px
+  border none
+  border-radius 12px
+  background #111827
+  color #fff
+  font-size 14px
+  font-weight 700
+  box-shadow 0 8px 20px rgba(17, 24, 39, 0.16)
+  cursor pointer
+  -webkit-tap-highlight-color transparent
+  &:active
+    opacity 0.92
+    transform scale(0.99)
+
+.page-search
+  padding 0
+  background transparent
+  :deep(.van-search__content)
+    background #fff
+    border-radius 12px
+    border 1px solid var(--ai-line)
+
+.list-panel
+  margin-top 4px
+  padding 6px
+  border-radius 18px
+  background var(--ai-surface)
+  border 1px solid var(--ai-line)
+  box-shadow 0 1px 3px rgba(17, 24, 39, 0.04)
+  min-height 280px
+
+.chat-list
+  display flex
+  flex-direction column
+  gap 2px
+
+.chat-item-wrapper
+  border-radius 12px
+  overflow hidden
+
+.chat-item
+  display flex
+  align-items center
+  gap 10px
+  padding 14px 12px
+  background transparent
+  cursor pointer
+  -webkit-tap-highlight-color transparent
+  &:active
+    background #f3f4f6
+
+.chat-item-body
+  flex 1
+  min-width 0
+
+.chat-title
+  font-size 14px
+  font-weight 600
+  color var(--ai-text)
+  overflow hidden
+  text-overflow ellipsis
+  white-space nowrap
+  line-height 1.4
+
+.chat-arrow
+  flex-shrink 0
+  color #9ca3af
+
+.action-btn
+  height 100%
+  border-radius 0
+  font-weight 600
+  font-size 13px
+
+.edit-btn
+  background #111827
+  border none
+
+.delete-btn
+  background #dc2626
+  border none
+
+:deep(.van-list)
+  .van-list__finished-text,
+  .van-list__loading,
+  .van-list__error-text
+    padding 18px
+    text-align center
+    color var(--ai-muted)
+    font-size 13px
+    font-weight 500
+
+:deep(.van-list__error-text)
+  color #dc2626
+  cursor pointer
+
+.popup
+  :deep(.van-picker__toolbar)
+    padding 16px
+  :deep(.van-picker__title)
+    font-size 16px
+    font-weight 700
+    color var(--ai-text)
+  :deep(.van-picker__confirm)
+    color var(--ai-accent)
+    font-weight 700
+
+.picker-option
+  display flex
+  align-items center
+  width 100%
+  padding 12px 16px
+  gap 12px
+  overflow hidden
+  .van-image
+    width 32px
+    height 32px
+    border-radius 50%
+    flex-shrink 0
+  span
+    font-size 14px
+    font-weight 500
+    color var(--ai-text)
+    overflow hidden
+    text-overflow ellipsis
+    white-space nowrap
+
+.dialog
+  :deep(.van-dialog)
+    border-radius 18px
+  :deep(.van-dialog__header)
+    font-weight 700
+    color var(--ai-text)
+
+.field
+  :deep(.van-field)
+    margin 8px 16px 16px
+    padding 12px 14px
+    background #f9fafb
+    border-radius 12px
+    border 1px solid var(--ai-line)
+
+.bottom-spacing
+  height 70px
